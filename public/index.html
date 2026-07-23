@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rewind — your last few weeks, decoded</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wordmark">
+    <span class="wordmark-icon" aria-hidden="true">
+      <span class="vu-bar"></span><span class="vu-bar"></span><span class="vu-bar"></span>
+    </span>
+    REWIND
+  </div>
+  <div id="authArea" class="auth-area"></div>
+</header>
+
+<main>
+
+  <!-- Logged-out state -->
+  <section id="loggedOut" class="hero hidden">
+    <p class="eyebrow">01 — connect</p>
+    <h1>Your last few weeks,<br /><em>decoded.</em></h1>
+    <p class="hero-sub">Rewind reads your recent Spotify plays and top tracks, then reasons through the pattern to
+      surface artists and songs you probably haven't heard yet — not just "more of the same."</p>
+    <a href="/login" class="btn btn-primary">Connect Spotify</a>
+    <p id="errorNote" class="error-note hidden"></p>
+  </section>
+
+  <!-- Logged-in state -->
+  <section id="dashboard" class="dashboard hidden">
+
+    <section class="controls">
+      <p class="eyebrow">02 — set the window</p>
+      <div class="counter-row">
+        <label for="weeksInput" class="counter-label">weeks back</label>
+        <div class="tape-counter">
+          <button type="button" id="weeksDown" class="counter-btn" aria-label="Decrease weeks">−</button>
+          <span id="weeksDisplay" class="counter-digits">04</span>
+          <button type="button" id="weeksUp" class="counter-btn" aria-label="Increase weeks">+</button>
+        </div>
+        <button type="button" id="analyzeBtn" class="btn btn-primary">Analyze</button>
+      </div>
+      <p class="fine-print">Spotify buckets its "top items" into ~4 weeks / ~6 months / all-time — we snap your
+        chosen window to the closest one and tell you which.</p>
+    </section>
+
+    <section id="loading" class="loading hidden">
+      <div class="vu-meter" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <p id="loadingText">reading your last plays…</p>
+    </section>
+
+    <section id="resultsArea" class="hidden">
+
+      <section class="panel">
+        <p class="eyebrow">now playing: you</p>
+        <p id="rangeNote" class="fine-print"></p>
+        <h2 class="panel-title">Top genres</h2>
+        <div id="genreBars" class="genre-bars"></div>
+
+        <h2 class="panel-title">Top artists</h2>
+        <div id="topArtists" class="card-grid"></div>
+
+        <h2 class="panel-title">Top tracks</h2>
+        <ol id="topTracks" class="track-list"></ol>
+      </section>
+
+      <section class="panel">
+        <p class="eyebrow">recently played</p>
+        <p id="recentNote" class="fine-print"></p>
+        <div id="recentStrip" class="recent-strip"></div>
+      </section>
+
+      <section class="panel">
+        <p class="eyebrow">03 — discover</p>
+        <h2 class="panel-title">Recommended by an AI, from your patterns</h2>
+        <button type="button" id="recsBtn" class="btn btn-secondary">Get recommendations</button>
+        <div id="recsLoading" class="loading hidden">
+          <div class="vu-meter" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <p>reasoning through the mix…</p>
+        </div>
+        <ol id="recsList" class="mixtape-list"></ol>
+      </section>
+
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">04 — auto-record</p>
+      <h2 class="panel-title">Keep a synced discovery playlist</h2>
+      <p class="fine-print">Rewind can maintain a playlist on your Spotify called "Rewind Discoveries" and
+        replace its contents on a schedule with a fresh batch of picks. Each refresh replaces what's there —
+        think Discover Weekly, reasoned through by Claude. This only runs while this server is actually
+        running on this computer.</p>
+
+      <div class="switch-row">
+        <label class="switch">
+          <input type="checkbox" id="autoEnabled" />
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
+        <span id="autoStatusLabel" class="counter-label">off</span>
+      </div>
+
+      <div class="cadence-row">
+        <label>
+          <span class="counter-label">cadence</span>
+          <select id="cadenceSelect">
+            <option value="daily">Daily</option>
+            <option value="every3days">Every 3 days</option>
+            <option value="weekly">Weekly</option>
+          </select>
+        </label>
+        <label id="weekdayField">
+          <span class="counter-label">on</span>
+          <select id="weekdaySelect">
+            <option value="1">Monday</option>
+            <option value="2">Tuesday</option>
+            <option value="3">Wednesday</option>
+            <option value="4">Thursday</option>
+            <option value="5">Friday</option>
+            <option value="6">Saturday</option>
+            <option value="0">Sunday</option>
+          </select>
+        </label>
+        <label>
+          <span class="counter-label">at (this computer's local time)</span>
+          <input type="time" id="timeInput" value="08:00" />
+        </label>
+        <label>
+          <span class="counter-label">based on last</span>
+          <select id="autoWeeksSelect">
+            <option value="1">1 week</option>
+            <option value="2">2 weeks</option>
+            <option value="4" selected>4 weeks</option>
+            <option value="8">8 weeks</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" id="saveScheduleBtn" class="btn btn-secondary">Save schedule</button>
+        <button type="button" id="syncNowBtn" class="btn btn-primary">Sync now</button>
+      </div>
+
+      <p id="syncStatus" class="fine-print"></p>
+    </section>
+  </section>
+
+</main>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
