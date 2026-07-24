@@ -4,6 +4,15 @@ All notable changes to Rewind are documented here.
 
 ## Unreleased — Play widget, dislikes, and artist expansion
 
+### Fixed
+- **False Spotify matches.** The play widget could show a completely unrelated song —
+  e.g. a recommended "Pig Roast — Justice for the Damned" resolving to an unrelated
+  Kottonmouth Kings track. Cause: the search fallback trusted whatever the top search
+  result was, with no check that its artist actually matched what was recommended. Fixed
+  by validating each candidate's artist against the expected one (checking several
+  results, not just the first) and returning no match at all — rather than a wrong one —
+  when nothing lines up. The UI now shows "No confident Spotify match found" in that case.
+
 ### Added
 - **Play button in the browser**: each recommendation is now resolved to a real Spotify
   track and rendered with Spotify's own embedded player widget — no extra OAuth scopes,

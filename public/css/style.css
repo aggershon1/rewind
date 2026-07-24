@@ -547,6 +547,14 @@ a { color: var(--teal); }
 }
 .open-spotify:hover { text-decoration: underline; }
 
+.no-match-note {
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
 .expansion-list { margin-top: 0.8rem; }
 .expansion-note { margin-bottom: 0.5rem; }
 .expansion-item {
