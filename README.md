@@ -30,9 +30,11 @@ track via search.
   Mode apps to keep working.
 - Development Mode apps are capped at **5 authorized users**. If it's just you, that's a non-issue.
 
-**If you set this app up before this feature was added:** the login now requests an extra
-permission (`playlist-modify-private`) to create and update the playlist. Click **Disconnect**
-in the app, then **Connect Spotify** again to re-authorize with the new scope.
+**If you set this app up before playlist features were added:** the login now requests
+extra permissions — `playlist-modify-private` (to create/update the Rewind Discoveries
+playlist) and, as of this update, `playlist-read-private` + `user-library-read` (to check
+recommendations against your other playlists and Liked Songs). Click **Disconnect** in
+the app, then **Connect Spotify** again to re-authorize with the current set of scopes.
 
 ## 2. Get an Anthropic API key
 
@@ -91,6 +93,37 @@ A few things drive what Claude sees, and what you see back:
    trigger another expansion round, so it can't cascade. This only fires once per
    artist — liking a second song by an artist you've already expanded won't add
    duplicates.
+6. **Manual weighting sliders.** Before hitting "Get recommendations," you can turn on
+   any of six dimensions — Lyrical themes, Aggressiveness, Intensity, Obscurity, Mood,
+   Sonic similarity — each with its own 0–100% slider. The combined total is hard-capped
+   at 100%: dragging past what's left just snaps back to the remaining amount. Whatever
+   you set gets folded into the prompt as explicit relative-priority instructions.
+7. **Duplicate detection against your own library.** Rewind can check every
+   recommendation against your Liked Songs and any playlists you select (a playlist
+   named "Starred" gets auto-suggested if one exists) — flagging matches in the UI and
+   skipping them entirely when building the Rewind Discoveries playlist. Automatic
+   matching can miss things (live versions, alternate titles), so there's also a manual
+   **"Already have this"** button for anything the automatic check doesn't catch. Either
+   way, once something's flagged, it's remembered and excluded from future
+   recommendations too.
+
+## Weighting, and avoiding what you already have
+
+- **Weighting sliders** live just above the "Get recommendations" button. They're
+  optional — leave everything off and recommendations work exactly as before. Only
+  dimensions you've explicitly enabled get sent; the rest get "normal" consideration.
+- **Duplicate checking** lives in its own settings panel ("05 — avoid duplicates"). It
+  needs two additional Spotify permissions (`playlist-read-private`, `user-library-read`)
+  beyond what earlier versions requested — **if you set this app up before this feature,
+  you'll need to Disconnect and Connect Spotify again** to grant them.
+- The duplicate index (a list of track IDs from your selected sources) is cached for an
+  hour to avoid re-walking a large library on every request; there's a "Refresh index
+  now" button if you want it rebuilt immediately after changing your Liked Songs or
+  playlists.
+- For very large libraries, indexing is capped at 40 pages per source (2,000–4,000
+  tracks depending on the endpoint) to keep a single request from running away — more
+  than enough for realistic personal libraries, but worth knowing about if you have an
+  unusually massive Liked Songs collection.
 
 ## How the "weeks" window works
 
@@ -150,8 +183,9 @@ This is set up for local use. If you deploy it somewhere real:
 
 ```
 server.js                 Express server: routes only, wires up the lib/ modules below
-lib/store.js               Local JSON-file persistence (tokens, playlist id, schedule, feedback)
-lib/spotify.js              Spotify OAuth + API calls (history, search, playlist writes)
+lib/store.js               Local JSON-file persistence (tokens, playlist id, schedule, feedback, dedup config)
+lib/spotify.js              Spotify OAuth + API calls (history, search, playlist writes, library pagination)
+lib/library.js               Builds/caches the "tracks you already have" index for duplicate detection
 lib/recommend.js            Builds the prompt, calls the Anthropic API, dedupes by artist
 lib/expand.js                Like-triggered "5 more from this artist" playlist expansion
 lib/constants.js             Shared playlist name/description

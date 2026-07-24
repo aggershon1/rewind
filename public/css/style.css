@@ -555,6 +555,103 @@ a { color: var(--teal); }
   font-style: italic;
 }
 
+/* Weighting sliders */
+
+.weights-panel {
+  margin: 1.2rem 0 1.5rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.weight-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 0.8rem 0;
+}
+
+.weight-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(120px, 2fr) 3ch;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.weight-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  cursor: help;
+}
+.weight-checkbox input { accent-color: var(--amber); }
+
+.weight-slider {
+  width: 100%;
+  accent-color: var(--amber);
+}
+.weight-slider:disabled { opacity: 0.35; }
+
+.weight-value {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--amber);
+  text-align: right;
+}
+
+.weight-total {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin: 0.6rem 0 0;
+  border-top: 1px solid var(--line);
+  padding-top: 0.6rem;
+}
+
+/* Duplicate button / tag */
+
+.duplicate-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.duplicate-btn:hover { border-color: var(--amber); color: var(--amber); }
+
+.duplicate-tag {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* Playlist checklist (avoid-duplicates settings) */
+
+.playlist-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 1rem 0;
+  padding: 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+}
+.playlist-item input { accent-color: var(--amber); }
+
 .expansion-list { margin-top: 0.8rem; }
 .expansion-note { margin-bottom: 0.5rem; }
 .expansion-item {

@@ -87,6 +87,14 @@
           up to 5 more songs by that artist, adds them to your Rewind Discoveries playlist right away, and lists them
           below — liking those just records feedback, it won't cascade into another round. Dislike a pick to tell the
           AI why, so future recommendations steer around it.</p>
+
+        <div class="weights-panel">
+          <p class="fine-print">Optional: turn on and weight what the AI should prioritize. The percentages you set
+            can't add up to more than 100% total — dragging past what's left just caps at the remaining amount.</p>
+          <div id="weightRows" class="weight-rows"></div>
+          <p class="weight-total">Total allocated: <span id="weightTotal">0</span>% / 100%</p>
+        </div>
+
         <button type="button" id="recsBtn" class="btn btn-secondary">Get recommendations</button>
         <div id="recsLoading" class="loading hidden">
           <div class="vu-meter" aria-hidden="true">
@@ -157,6 +165,31 @@
       </div>
 
       <p id="syncStatus" class="fine-print"></p>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">05 — avoid duplicates</p>
+      <h2 class="panel-title">Don't recommend what I already have</h2>
+      <p class="fine-print">Rewind can check recommendations against your Liked Songs and any playlists you pick
+        below — flagging matches, and skipping them entirely when building your Rewind Discoveries playlist. If a
+        playlist named "Starred" is found, it's pre-selected automatically.</p>
+
+      <label class="switch-row">
+        <span class="switch">
+          <input type="checkbox" id="includeSavedTracks" checked />
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </span>
+        <span class="counter-label">Include my Liked Songs library</span>
+      </label>
+
+      <div id="playlistChecklist" class="playlist-checklist"></div>
+
+      <div class="btn-row">
+        <button type="button" id="saveLibraryConfigBtn" class="btn btn-secondary">Save selection</button>
+        <button type="button" id="refreshIndexBtn" class="btn btn-primary">Refresh index now</button>
+      </div>
+
+      <p id="indexStatus" class="fine-print"></p>
     </section>
   </section>
 

@@ -2,6 +2,43 @@
 
 All notable changes to Rewind are documented here.
 
+## Unreleased — Weighting sliders and duplicate detection
+
+### Fixed
+- The "avoid duplicates" panel silently showed "No playlists found" whenever the
+  `/api/library/playlists` request actually failed (most commonly: the Spotify token
+  doesn't yet have the new `playlist-read-private` scope because the app wasn't
+  reconnected after this update) — the error was fetched but never checked before being
+  used. Now checks `response.ok` first and displays the real error, with a hint to
+  reconnect Spotify when the failure looks scope-related.
+
+### Added
+- **Manual weighting sliders**: six toggleable dimensions (Lyrical themes,
+  Aggressiveness, Intensity, Obscurity, Mood, Sonic similarity), each with its own 0–100%
+  slider. The combined total is hard-capped at 100% client-side (dragging past what's
+  left snaps to the remaining amount) and re-validated server-side. Enabled dimensions
+  are folded into the prompt as explicit relative-priority instructions.
+- **Duplicate detection against your library**: checks every recommendation against your
+  Liked Songs and any playlists you select in the new "05 — avoid duplicates" panel (a
+  playlist named "Starred" is auto-suggested if found). Flagged matches show a distinct
+  tag in the UI and are skipped entirely when populating the Rewind Discoveries playlist,
+  both in the interactive list and the scheduled auto-sync.
+- **Manual "Already have this" button**: a third action alongside Like/Dislike, for
+  anything the automatic library check misses (live versions, alternate titles, etc.).
+  Auto-detected and manually-flagged duplicates share the same list and both feed future
+  prompts as "never recommend this again."
+- New endpoints: `GET/POST /api/library/config`, `GET /api/library/playlists`,
+  `POST /api/library/refresh-index`. `POST /api/feedback` gained `duplicate`/`unduplicate`
+  actions. `POST /api/recommendations` now accepts an optional `weights` object.
+- New module `lib/library.js`: builds and caches a lookup index (track IDs + normalized
+  name/artist keys) from Liked Songs and selected playlists, rebuilt hourly or on demand.
+- Two new Spotify OAuth scopes: `playlist-read-private`, `user-library-read`.
+
+### Changed
+- `getRecommendations` signature grew two more arguments (`duplicateFeedback`, `weights`).
+- The duplicate-check index is capped at 40 pages per source (~2,000–4,000 tracks) to
+  bound worst-case request time for very large libraries.
+
 ## Unreleased — Play widget, dislikes, and artist expansion
 
 ### Fixed
