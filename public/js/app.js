@@ -37,10 +37,16 @@
   const syncStatus = document.getElementById('syncStatus');
 
   let weeks = 4;
-  let likedKeys = new Set();
+  let likedMap = new Map();
+  let dislikedMap = new Map();
+
+  const DISLIKE_REASONS = ['Not my style', "Don't like this artist", 'Already know it well', 'Wrong mood/genre', 'Other'];
 
   function feedbackKey(name, artist) {
     return `${(name || '').trim().toLowerCase()}::${(artist || '').trim().toLowerCase()}`;
+  }
+  function enc(v) {
+    return encodeURIComponent(v || '');
   }
 
   function setWeeks(n) {
@@ -137,48 +143,106 @@
     }
   }
 
-  async function loadLikedKeys() {
+  async function loadFeedbackMaps() {
     try {
       const resp = await fetch('/api/feedback');
       const data = await resp.json();
-      likedKeys = new Set((data.liked || []).map((f) => f.key));
+      likedMap = new Map((data.liked || []).map((f) => [f.key, f]));
+      dislikedMap = new Map((data.disliked || []).map((f) => [f.key, f]));
     } catch {
-      likedKeys = new Set();
+      likedMap = new Map();
+      dislikedMap = new Map();
     }
+  }
+
+  function embedHtml(spotify) {
+    if (!spotify?.id) return '';
+    return `<div class="embed-wrap"><iframe src="https://open.spotify.com/embed/track/${spotify.id}" width="100%" height="80" frameborder="0" allow="autoplay; encrypted-media; clipboard-write; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
+  }
+
+  function actionAreaHtml(key) {
+    const liked = likedMap.has(key);
+    const disliked = dislikedMap.has(key);
+
+    if (liked) {
+      return `<button type="button" class="like-btn liked" data-action="unlike">♥ Liked</button>`;
+    }
+    if (disliked) {
+      const r = dislikedMap.get(key)?.dislikeReason;
+      return `
+        <span class="disliked-tag">👎 Disliked${r ? ` — ${r}` : ''}</span>
+        <button type="button" class="undo-btn" data-action="undislike">Undo</button>`;
+    }
+    return `
+      <button type="button" class="like-btn" data-action="like">♡ Like</button>
+      <button type="button" class="dislike-btn" data-action="show-dislike">👎 Dislike</button>
+      <div class="dislike-reasons hidden">
+        ${DISLIKE_REASONS.map((r) => `<button type="button" class="reason-chip" data-action="dislike" data-reason="${r}">${r}</button>`).join('')}
+      </div>`;
   }
 
   function renderRecs(recommendations) {
     recsList.innerHTML = (recommendations || [])
       .map((r) => {
         const key = feedbackKey(r.name, r.artist);
-        const isLiked = likedKeys.has(key);
         return `
-        <li data-key="${key}" data-name="${encodeURIComponent(r.name || '')}" data-artist="${encodeURIComponent(r.artist || '')}" data-type="${encodeURIComponent(r.type || '')}" data-genre="${encodeURIComponent(r.genre || '')}" data-reason="${encodeURIComponent(r.reason || '')}">
+        <li data-key="${key}" data-name="${enc(r.name)}" data-artist="${enc(r.artist)}" data-type="${enc(r.type)}" data-genre="${enc(r.genre)}" data-reason="${enc(r.reason)}">
           <span class="mixtape-name">${r.name}${r.artist ? ` — ${r.artist}` : ''}</span>
           <span class="mixtape-type">${r.type}</span>
           <span class="mixtape-genre">${r.genre || ''}</span>
-          <button type="button" class="like-btn ${isLiked ? 'liked' : ''}" aria-pressed="${isLiked}">
-            ${isLiked ? '♥ Liked' : '♡ Like'}
-          </button>
           <p class="mixtape-reason">${r.reason || ''}</p>
+          ${embedHtml(r.spotify)}
+          ${r.spotify?.url ? `<a class="open-spotify" href="${r.spotify.url}" target="_blank" rel="noopener">Open in Spotify ↗</a>` : ''}
+          <div class="action-area">${actionAreaHtml(key)}</div>
+          <div class="expansion-list"></div>
         </li>`;
       })
       .join('');
   }
 
+  function renderExpansionTracks(li, tracks) {
+    const container = li.querySelector('.expansion-list');
+    if (!tracks.length) return;
+    container.innerHTML =
+      `<p class="fine-print expansion-note">+ ${tracks.length} more from this artist — added to your Rewind Discoveries playlist:</p>` +
+      tracks
+        .map((t) => {
+          const key = feedbackKey(t.name, t.artist);
+          const liked = likedMap.has(key);
+          return `
+        <div class="expansion-item" data-key="${key}" data-name="${enc(t.name)}" data-artist="${enc(t.artist)}" data-type="track" data-genre="" data-reason="" data-expansion="true">
+          <span class="track-name">${t.name}</span>
+          <span class="track-artist">— ${t.artist}</span>
+          ${embedHtml(t)}
+          <button type="button" class="like-btn ${liked ? 'liked' : ''}" data-action="${liked ? 'unlike' : 'like'}">${liked ? '♥ Liked' : '♡ Like'}</button>
+        </div>`;
+        })
+        .join('');
+  }
+
   recsList.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.like-btn');
+    const btn = e.target.closest('[data-action]');
     if (!btn) return;
-    const li = btn.closest('li');
-    const wasLiked = btn.classList.contains('liked');
+
+    if (btn.dataset.action === 'show-dislike') {
+      btn.parentElement.querySelector('.dislike-reasons')?.classList.toggle('hidden');
+      return;
+    }
+
+    const scope = btn.closest('.expansion-item') || btn.closest('li');
+    const isExpansionScope = scope.classList.contains('expansion-item');
+
     const payload = {
-      name: decodeURIComponent(li.dataset.name),
-      artist: decodeURIComponent(li.dataset.artist),
-      type: decodeURIComponent(li.dataset.type),
-      genre: decodeURIComponent(li.dataset.genre),
-      reason: decodeURIComponent(li.dataset.reason),
-      liked: !wasLiked,
+      name: decodeURIComponent(scope.dataset.name),
+      artist: decodeURIComponent(scope.dataset.artist),
+      type: decodeURIComponent(scope.dataset.type || ''),
+      genre: decodeURIComponent(scope.dataset.genre || ''),
+      reason: decodeURIComponent(scope.dataset.reason || ''),
+      action: btn.dataset.action,
+      isExpansion: isExpansionScope,
     };
+    if (btn.dataset.action === 'dislike') payload.dislikeReason = btn.dataset.reason;
+
     btn.disabled = true;
     try {
       const resp = await fetch('/api/feedback', {
@@ -186,13 +250,24 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!resp.ok) throw new Error('Save failed');
+      if (!resp.ok) throw new Error((await resp.json()).error || 'Save failed');
       const data = await resp.json();
-      likedKeys = new Set((data.liked || []).map((f) => f.key));
-      const nowLiked = likedKeys.has(li.dataset.key);
-      btn.classList.toggle('liked', nowLiked);
-      btn.setAttribute('aria-pressed', String(nowLiked));
-      btn.textContent = nowLiked ? '♥ Liked' : '♡ Like';
+      likedMap = new Map((data.liked || []).map((f) => [f.key, f]));
+      dislikedMap = new Map((data.disliked || []).map((f) => [f.key, f]));
+
+      if (isExpansionScope) {
+        const key = scope.dataset.key;
+        const liked = likedMap.has(key);
+        const likeBtn = scope.querySelector('.like-btn');
+        likeBtn.classList.toggle('liked', liked);
+        likeBtn.dataset.action = liked ? 'unlike' : 'like';
+        likeBtn.textContent = liked ? '♥ Liked' : '♡ Like';
+      } else {
+        scope.querySelector('.action-area').innerHTML = actionAreaHtml(scope.dataset.key);
+        if (btn.dataset.action === 'like' && data.expansionTracks?.length) {
+          renderExpansionTracks(scope, data.expansionTracks);
+        }
+      }
     } catch (err) {
       alert(`Couldn't save that: ${err.message}`);
     } finally {
@@ -205,7 +280,7 @@
     recsList.innerHTML = '';
     recsBtn.disabled = true;
     try {
-      await loadLikedKeys();
+      await loadFeedbackMaps();
       const resp = await fetch('/api/recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

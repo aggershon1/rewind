@@ -2,7 +2,38 @@
 
 All notable changes to Rewind are documented here.
 
-## Unreleased — Play counts & liked-feedback memory
+## Unreleased — Play widget, dislikes, and artist expansion
+
+### Added
+- **Play button in the browser**: each recommendation is now resolved to a real Spotify
+  track and rendered with Spotify's own embedded player widget — no extra OAuth scopes,
+  uses whatever Spotify session the browser already has, falls back to a 30-second
+  preview otherwise.
+- **Dislike button with reasons**: alongside Like, each pick can be disliked with a quick
+  reason ("Not my style," "Don't like this artist," "Already know it well," "Wrong
+  mood/genre," "Other"). Disliked picks and their reasons are folded into every future
+  prompt so the model actively steers away from them.
+- **Automatic artist expansion on like**: the first time you like a pick, Rewind
+  searches for up to 5 more songs by that artist, adds them straight to the Rewind
+  Discoveries playlist, and displays them inline with their own Like button. Liking one
+  of those only records feedback — no further expansion, so it can't cascade. Runs at
+  most once per artist (tracked in `feedback.expandedArtists`).
+- **One pick per artist, guaranteed**: enforced both as a prompt instruction and a
+  server-side filter (`dedupeByArtist`) that drops any repeat artist regardless of what
+  the model returns.
+- New endpoints: `lib/expand.js` (`expandArtistIfNew`), extended `POST /api/feedback` to
+  take an `action` of `like` / `unlike` / `dislike` / `undislike` instead of a single
+  boolean, plus new Spotify helpers `searchArtistTracks` and `addPlaylistItems`.
+
+### Changed
+- `store.feedback` now also holds `disliked` (with reasons) and `expandedArtists`.
+- `getRecommendations` signature grew a third argument (`dislikedFeedback`) and now
+  returns an artist-deduped list.
+- `POST /api/recommendations` response now includes a `spotify: { id, uri, url }` field
+  per recommendation (null if no match was found) for the play widget and open-in-Spotify
+  link.
+
+## v1.1 — Play counts & liked-feedback memory
 
 ### Added
 - Recommendations are now ranked by **real play counts**, tallied by paginating through
