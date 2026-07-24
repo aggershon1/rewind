@@ -610,6 +610,23 @@ a { color: var(--teal); }
   padding-top: 0.6rem;
 }
 
+.rec-count-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.4rem 0 0.8rem;
+}
+.rec-count-field select {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.45rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  width: fit-content;
+}
+
 /* Duplicate button / tag */
 
 .duplicate-btn {
