@@ -62,7 +62,7 @@ back you want and hit **Analyze**, followed by **Get recommendations**.
 
 ## How recommendations are actually built
 
-Two things drive what Claude sees:
+A few things drive what Claude sees, and what you see back:
 
 1. **Real play counts, not Spotify's own ranking.** Rather than using Spotify's opaque
    "top tracks" algorithm, Rewind pages backward through `/me/player/recently-played`
@@ -72,11 +72,25 @@ Two things drive what Claude sees:
    just "was this played at some point in the window." This is capped at 10 pages (500
    plays) per request to keep API usage sane; if you hit that cap, or if Spotify's own
    history for this endpoint doesn't go back as far as you asked, the app tells you.
-2. **Songs you've liked from past recommendations.** Every recommendation has a **Like**
-   button. Liking one saves it to `.data/store.json`, and every future recommendation
-   call — both the interactive button and the scheduled auto-playlist sync — includes
-   your liked history in the prompt, with instructions to calibrate toward that taste
-   rather than just repeating the same picks. This compounds over time as you like more.
+2. **One pick per artist.** Both a prompt instruction and a hard server-side filter —
+   the model is told not to repeat an artist, and the app drops any duplicate anyway, so
+   you'll never see two songs by the same act in one batch.
+3. **Play it right in the browser.** Each recommendation is resolved to a real Spotify
+   track and shown with Spotify's own embedded player (no separate playback setup or
+   extra permissions needed — it uses whatever Spotify session your browser already
+   has, and falls back to a 30-second preview if you're not logged in there).
+4. **Like, dislike, and reasons — all remembered.** Every pick has a **Like** and
+   **Dislike** button. Disliking one asks why (not your style, don't like the artist,
+   already overplayed, wrong mood, or other), and both liked and disliked history —
+   reasons included — get folded into every future prompt, interactive or scheduled, so
+   the model steers toward what's worked and away from what hasn't.
+5. **Liking a track pulls in more from that artist automatically.** The first time you
+   like a pick, Rewind searches for up to 5 more songs by the same artist, adds them
+   straight to your Rewind Discoveries playlist, and lists them right there in the UI —
+   each with its own Like button. Liking one of *those* only records feedback; it won't
+   trigger another expansion round, so it can't cascade. This only fires once per
+   artist — liking a second song by an artist you've already expanded won't add
+   duplicates.
 
 ## How the "weeks" window works
 
@@ -93,7 +107,8 @@ schedule you set (daily / every 3 days / weekly, at whatever time you pick):
 
 - **Each refresh replaces the playlist's contents** with a fresh batch — it's a rotating discovery
   playlist, not one that accumulates. If you want to keep a track, save or move it elsewhere before
-  the next cycle.
+  the next cycle. (This includes tracks added via the like-triggered artist expansion above — if you
+  like something between scheduled syncs, the next full sync still replaces the whole playlist.)
 - The first sync creates the playlist (private, named "Rewind Discoveries"); later syncs reuse it.
 - **"Sync now"** runs the whole pipeline immediately, so you can see it work without waiting for
   the schedule.
@@ -135,9 +150,11 @@ This is set up for local use. If you deploy it somewhere real:
 
 ```
 server.js                 Express server: routes only, wires up the lib/ modules below
-lib/store.js               Local JSON-file persistence (tokens, playlist id, schedule config)
+lib/store.js               Local JSON-file persistence (tokens, playlist id, schedule, feedback)
 lib/spotify.js              Spotify OAuth + API calls (history, search, playlist writes)
-lib/recommend.js            Builds the prompt and calls the Anthropic API
+lib/recommend.js            Builds the prompt, calls the Anthropic API, dedupes by artist
+lib/expand.js                Like-triggered "5 more from this artist" playlist expansion
+lib/constants.js             Shared playlist name/description
 lib/playlistSync.js         The core sync routine: history → recommendations → playlist
 lib/scheduler.js            node-cron wiring, rebuilt whenever the schedule changes
 public/index.html          Page markup
