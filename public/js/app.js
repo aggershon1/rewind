@@ -192,7 +192,7 @@
           <span class="mixtape-genre">${r.genre || ''}</span>
           <p class="mixtape-reason">${r.reason || ''}</p>
           ${embedHtml(r.spotify)}
-          ${r.spotify?.url ? `<a class="open-spotify" href="${r.spotify.url}" target="_blank" rel="noopener">Open in Spotify ↗</a>` : ''}
+          ${r.spotify?.url ? `<a class="open-spotify" href="${r.spotify.url}" target="_blank" rel="noopener">Open in Spotify ↗</a>` : '<p class="no-match-note">No confident Spotify match found for this pick.</p>'}
           <div class="action-area">${actionAreaHtml(key)}</div>
           <div class="expansion-list"></div>
         </li>`;
