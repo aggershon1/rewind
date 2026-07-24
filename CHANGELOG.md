@@ -2,6 +2,33 @@
 
 All notable changes to Rewind are documented here.
 
+## Unreleased — Configurable count and track-promotion detection
+
+### Added
+- **Configurable recommendation count**: choose 10/20/30/50 per batch (interactive and
+  scheduled sync each have their own control). Since one-pick-per-artist still applies,
+  a request for 50 may honestly return fewer if that many distinct, well-justified
+  artists aren't there — the response reports `requestedCount` alongside the actual
+  list so the UI can say so explicitly rather than silently under-delivering.
+- **Track-promotion detection** ("06 — track promotions"): pick a playlist you use to
+  keep favorites (Starred, or anything else), and Rewind checks it — on page load and
+  before every scheduled sync — for tracks it once recommended that have newly appeared
+  there. A match is treated as a strong implicit Like, including the same
+  artist-expansion bonus a manual Like triggers. The first check on a given playlist
+  only captures a baseline, so pre-existing contents don't flood in as false positives.
+- New module `lib/migration.js` (`checkMigrations`) and a durable `everRecommended` log
+  in the store (capped at 500 entries) so a promotion can be recognized even weeks after
+  the original recommendation.
+- New endpoints: `GET/POST /api/migration/config`, `POST /api/migration/check`.
+- `POST /api/recommendations` and `POST /api/playlist-config` both accept an optional
+  `count`/`recommendationCount`, clamped to 1–50.
+
+### Changed
+- `getRecommendations` signature grew a `count` argument; `max_tokens` for the Anthropic
+  call now scales with the requested count instead of a fixed value.
+- No new Spotify OAuth scope required — track-promotion detection reuses the
+  `playlist-read-private` permission added for duplicate detection.
+
 ## Unreleased — Weighting sliders and duplicate detection
 
 ### Fixed

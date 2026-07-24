@@ -106,12 +106,24 @@ A few things drive what Claude sees, and what you see back:
    **"Already have this"** button for anything the automatic check doesn't catch. Either
    way, once something's flagged, it's remembered and excluded from future
    recommendations too.
+8. **How many recommendations.** Pick 10, 20, 30, or 50 per batch. Worth knowing: the
+   one-pick-per-artist rule means a request for 50 needs 50 genuinely distinct, fitting
+   artists — for a niche genre, Rewind may honestly return fewer than asked rather than
+   pad with weak picks, and it tells you when that happens.
+9. **Notices when you move a track to another playlist.** Pick a "graduation" playlist
+   (Starred, or anything else you use to keep favorites) and Rewind checks it — on page
+   load, and before every scheduled sync — for tracks it once recommended that have
+   newly shown up there. Finding one is treated as a strong implicit Like, including the
+   same 5-more-from-this-artist bonus a manual Like triggers. The very first check just
+   captures a baseline rather than treating your playlist's existing contents as new.
 
-## Weighting, and avoiding what you already have
+## Weighting, avoiding what you already have, and recommendation count
 
 - **Weighting sliders** live just above the "Get recommendations" button. They're
   optional — leave everything off and recommendations work exactly as before. Only
   dimensions you've explicitly enabled get sent; the rest get "normal" consideration.
+- **Recommendation count** is a simple dropdown next to the same button (10/20/30/50),
+  with a matching control in the auto-record schedule panel for the background sync.
 - **Duplicate checking** lives in its own settings panel ("05 — avoid duplicates"). It
   needs two additional Spotify permissions (`playlist-read-private`, `user-library-read`)
   beyond what earlier versions requested — **if you set this app up before this feature,
@@ -124,6 +136,11 @@ A few things drive what Claude sees, and what you see back:
   tracks depending on the endpoint) to keep a single request from running away — more
   than enough for realistic personal libraries, but worth knowing about if you have an
   unusually massive Liked Songs collection.
+- **Track-promotion detection** ("06 — track promotions") needs no additional scope
+  beyond what duplicate-checking already added — it reuses the same playlist-reading
+  permission. It only recognizes tracks Rewind itself has recommended before (logged in
+  `everRecommended`, capped at the last 500), so moving a song you found some other way
+  into your graduation playlist won't trigger anything.
 
 ## How the "weeks" window works
 
@@ -186,6 +203,7 @@ server.js                 Express server: routes only, wires up the lib/ modules
 lib/store.js               Local JSON-file persistence (tokens, playlist id, schedule, feedback, dedup config)
 lib/spotify.js              Spotify OAuth + API calls (history, search, playlist writes, library pagination)
 lib/library.js               Builds/caches the "tracks you already have" index for duplicate detection
+lib/migration.js              Detects tracks moved into a "graduation" playlist as an implicit Like
 lib/recommend.js            Builds the prompt, calls the Anthropic API, dedupes by artist
 lib/expand.js                Like-triggered "5 more from this artist" playlist expansion
 lib/constants.js             Shared playlist name/description

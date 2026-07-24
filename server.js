@@ -2,13 +2,14 @@ require('dotenv').config();
 const express = require('express');
 const crypto = require('crypto');
 
-const { loadStore, saveStore } = require('./lib/store');
+const { loadStore, saveStore, recordRecommended } = require('./lib/store');
 const { exchangeCodeForTokens, ensureFreshToken, fetchHistory, searchTrackUri, getUserPlaylists } = require('./lib/spotify');
 const { getRecommendations } = require('./lib/recommend');
 const { syncPlaylistCore } = require('./lib/playlistSync');
 const { reschedule } = require('./lib/scheduler');
 const { expandArtistIfNew } = require('./lib/expand');
 const { buildReferenceIndex, isIndexStale, toLookupSets, isDuplicateTrack } = require('./lib/library');
+const { checkMigrations } = require('./lib/migration');
 const { WEIGHT_DIMENSIONS } = require('./lib/constants');
 
 const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI, ANTHROPIC_API_KEY, PORT } = process.env;
@@ -136,6 +137,7 @@ async function getOrBuildIndex(token, store) {
 
 app.post('/api/recommendations', async (req, res) => {
   const weeks = Math.min(52, Math.max(1, parseInt(req.body?.weeks, 10) || 4));
+  const count = Math.min(50, Math.max(1, parseInt(req.body?.count, 10) || 10));
   const weightResult = validateWeights(req.body?.weights);
   if (weightResult.error) return res.status(400).json({ error: weightResult.error });
 
@@ -148,7 +150,8 @@ app.post('/api/recommendations', async (req, res) => {
       store.feedback?.liked || [],
       store.feedback?.disliked || [],
       store.feedback?.duplicates || [],
-      weightResult.value
+      weightResult.value,
+      count
     );
 
     const index = await getOrBuildIndex(token, store).catch((err) => {
@@ -163,28 +166,38 @@ app.post('/api/recommendations', async (req, res) => {
       recommendations.map(async (rec) => {
         const match = await searchTrackUri(token, rec).catch(() => null);
         let duplicate = false;
-        if (match && lookup && isDuplicateTrack(lookup, match)) {
-          duplicate = true;
-          const key = feedbackKey(rec.name, rec.artist);
-          if (!store.feedback.duplicates) store.feedback.duplicates = [];
-          if (!store.feedback.duplicates.some((f) => f.key === key)) {
-            store.feedback.duplicates.push({
-              key,
-              name: rec.name,
-              artist: rec.artist || null,
-              type: rec.type || null,
-              genre: rec.genre || null,
-              source: 'auto',
-              flaggedAt: new Date().toISOString(),
-            });
+        if (match) {
+          // Log every resolved recommendation so a future migration check can recognize
+          // it if this track later shows up newly added to the listener's "graduation" playlist.
+          recordRecommended(store, { trackId: match.id, name: rec.name, artist: rec.artist, genre: rec.genre });
+
+          if (lookup && isDuplicateTrack(lookup, match)) {
+            duplicate = true;
+            const key = feedbackKey(rec.name, rec.artist);
+            if (!store.feedback.duplicates) store.feedback.duplicates = [];
+            if (!store.feedback.duplicates.some((f) => f.key === key)) {
+              store.feedback.duplicates.push({
+                key,
+                name: rec.name,
+                artist: rec.artist || null,
+                type: rec.type || null,
+                genre: rec.genre || null,
+                source: 'auto',
+                flaggedAt: new Date().toISOString(),
+              });
+            }
           }
         }
         return { ...rec, spotify: match ? { id: match.id, uri: match.uri, url: match.url } : null, duplicate };
       })
     );
 
-    saveStore(store); // persists any newly-built index and auto-flagged duplicates
-    res.json({ recommendations: resolved, basedOn: { weeksRequested: weeks, timeRangeLabel: history.timeRangeLabel } });
+    saveStore(store); // persists any newly-built index, auto-flagged duplicates, and recommendation log
+    res.json({
+      recommendations: resolved,
+      requestedCount: count,
+      basedOn: { weeksRequested: weeks, timeRangeLabel: history.timeRangeLabel },
+    });
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message });
@@ -209,6 +222,7 @@ app.post('/api/playlist-config', (req, res) => {
     minute: Number.isInteger(body.minute) ? Math.min(59, Math.max(0, body.minute)) : store.config.minute,
     weekday: Number.isInteger(body.weekday) ? Math.min(6, Math.max(0, body.weekday)) : store.config.weekday,
     weeks: Math.min(52, Math.max(1, parseInt(body.weeks, 10) || store.config.weeks)),
+    recommendationCount: Math.min(50, Math.max(1, parseInt(body.recommendationCount, 10) || store.config.recommendationCount || 12)),
   };
 
   store.config = config;
@@ -266,6 +280,48 @@ app.post('/api/library/refresh-index', async (req, res) => {
     store.dedup.cachedIndex = index;
     saveStore(store);
     res.json({ indexBuiltAt: index.builtAt, indexSize: index.trackIds.length });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// ---------- Track-promotion detection ("moved to Starred" -> implicit Like) ----------
+
+app.get('/api/migration/config', (req, res) => {
+  const store = loadStore();
+  res.json({
+    targetPlaylistId: store.migration?.targetPlaylistId || null,
+    lastCheckedAt: store.migration?.lastCheckedAt || null,
+  });
+});
+
+app.post('/api/migration/config', (req, res) => {
+  const store = loadStore();
+  if (!store.migration) {
+    store.migration = { targetPlaylistId: null, knownTrackIds: [], baselineSet: false, lastCheckedAt: null };
+  }
+  const newTarget = req.body?.targetPlaylistId || null;
+  if (newTarget !== store.migration.targetPlaylistId) {
+    // Switching targets means the old snapshot is meaningless — re-baseline against the new one.
+    store.migration.targetPlaylistId = newTarget;
+    store.migration.knownTrackIds = [];
+    store.migration.baselineSet = false;
+    store.migration.lastCheckedAt = null;
+  }
+  saveStore(store);
+  res.json({ ok: true });
+});
+
+app.post('/api/migration/check', async (req, res) => {
+  try {
+    const token = await getValidAccessToken();
+    const store = loadStore();
+    if (!store.migration?.targetPlaylistId) return res.json({ newlyLiked: [] });
+
+    const result = await checkMigrations(token, store);
+    saveStore(store);
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message });

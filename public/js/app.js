@@ -26,6 +26,7 @@
   const recsList = document.getElementById('recsList');
   const weightRowsEl = document.getElementById('weightRows');
   const weightTotalEl = document.getElementById('weightTotal');
+  const recCountSelect = document.getElementById('recCountSelect');
 
   const autoEnabled = document.getElementById('autoEnabled');
   const autoStatusLabel = document.getElementById('autoStatusLabel');
@@ -34,6 +35,7 @@
   const weekdaySelect = document.getElementById('weekdaySelect');
   const timeInput = document.getElementById('timeInput');
   const autoWeeksSelect = document.getElementById('autoWeeksSelect');
+  const autoRecCountSelect = document.getElementById('autoRecCountSelect');
   const saveScheduleBtn = document.getElementById('saveScheduleBtn');
   const syncNowBtn = document.getElementById('syncNowBtn');
   const syncStatus = document.getElementById('syncStatus');
@@ -43,6 +45,11 @@
   const saveLibraryConfigBtn = document.getElementById('saveLibraryConfigBtn');
   const refreshIndexBtn = document.getElementById('refreshIndexBtn');
   const indexStatus = document.getElementById('indexStatus');
+
+  const migrationPlaylistSelect = document.getElementById('migrationPlaylistSelect');
+  const saveMigrationConfigBtn = document.getElementById('saveMigrationConfigBtn');
+  const checkMigrationsBtn = document.getElementById('checkMigrationsBtn');
+  const migrationStatus = document.getElementById('migrationStatus');
 
   let weeks = 4;
   let likedMap = new Map();
@@ -381,14 +388,23 @@
     recsBtn.disabled = true;
     try {
       await loadFeedbackMaps();
+      const requestedCount = parseInt(recCountSelect.value, 10);
       const resp = await fetch('/api/recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weeks, weights: getWeightState() }),
+        body: JSON.stringify({ weeks, weights: getWeightState(), count: requestedCount }),
       });
       if (!resp.ok) throw new Error((await resp.json()).error || 'Request failed');
       const data = await resp.json();
       renderRecs(data.recommendations);
+      const existingNote = recsList.parentElement.querySelector('.count-note');
+      if (existingNote) existingNote.remove();
+      if (data.recommendations.length < requestedCount) {
+        const note = document.createElement('p');
+        note.className = 'fine-print count-note';
+        note.textContent = `Requested ${requestedCount}, got ${data.recommendations.length} unique-artist picks that genuinely fit.`;
+        recsList.parentElement.insertBefore(note, recsList);
+      }
     } catch (err) {
       alert(`Couldn't get recommendations: ${err.message}`);
     } finally {
@@ -434,6 +450,7 @@
       weekdaySelect.value = String(c.weekday);
       timeInput.value = `${String(c.hour).padStart(2, '0')}:${String(c.minute).padStart(2, '0')}`;
       autoWeeksSelect.value = String(c.weeks);
+      autoRecCountSelect.value = String(c.recommendationCount || 12);
       updateCadenceUI();
       renderSyncStatus(data.playlist);
     } catch (err) {
@@ -450,6 +467,7 @@
       hour,
       minute,
       weeks: parseInt(autoWeeksSelect.value, 10),
+      recommendationCount: parseInt(autoRecCountSelect.value, 10),
     };
     saveScheduleBtn.disabled = true;
     try {
@@ -480,6 +498,95 @@
     } finally {
       syncNowBtn.disabled = false;
     }
+  });
+
+  // ---------- Track-promotion detection ----------
+
+  async function runMigrationCheck(silentOnFailure) {
+    try {
+      const resp = await fetch('/api/migration/check', { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Check failed');
+
+      if (data.baselineJustSet) {
+        migrationStatus.textContent =
+          'Baseline captured for this playlist — future checks will detect new additions from here.';
+      } else if (data.newlyLiked && data.newlyLiked.length) {
+        migrationStatus.textContent = `Found ${data.newlyLiked.length} newly-promoted track(s): ${data.newlyLiked
+          .map((n) => n.name)
+          .join(', ')} — marked as liked.`;
+      } else {
+        migrationStatus.textContent = `Checked just now — no new promotions found.`;
+      }
+    } catch (err) {
+      if (!silentOnFailure) migrationStatus.textContent = `Check failed: ${err.message}`;
+    }
+  }
+
+  async function loadMigrationSettings() {
+    try {
+      const [playlistsResp, configResp] = await Promise.all([
+        fetch('/api/library/playlists'),
+        fetch('/api/migration/config'),
+      ]);
+      if (!playlistsResp.ok) {
+        migrationStatus.textContent = "Couldn't load your playlists for this.";
+        return;
+      }
+      const playlistsData = await playlistsResp.json();
+      const configData = configResp.ok ? await configResp.json() : { targetPlaylistId: null };
+
+      migrationPlaylistSelect.innerHTML =
+        '<option value="">— none selected —</option>' +
+        (playlistsData.playlists || [])
+          .map(
+            (p) =>
+              `<option value="${p.id}" ${p.id === configData.targetPlaylistId ? 'selected' : ''}>${p.name}</option>`
+          )
+          .join('');
+
+      if (!configData.targetPlaylistId) {
+        const guess = (playlistsData.playlists || []).find((p) => /starred/i.test(p.name));
+        if (guess) migrationPlaylistSelect.value = guess.id;
+      }
+
+      if (migrationPlaylistSelect.value) {
+        migrationStatus.textContent = 'Checking for recent promotions…';
+        await runMigrationCheck(true);
+      } else {
+        migrationStatus.textContent = 'Pick a playlist above to enable this.';
+      }
+    } catch (err) {
+      migrationStatus.textContent = `Couldn't load settings: ${err.message}`;
+    }
+  }
+
+  saveMigrationConfigBtn.addEventListener('click', async () => {
+    saveMigrationConfigBtn.disabled = true;
+    try {
+      const resp = await fetch('/api/migration/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetPlaylistId: migrationPlaylistSelect.value || null }),
+      });
+      if (!resp.ok) throw new Error('Save failed');
+      migrationStatus.textContent = migrationPlaylistSelect.value
+        ? 'Saved — checking for a baseline…'
+        : 'Saved (disabled).';
+      if (migrationPlaylistSelect.value) await runMigrationCheck(true);
+    } catch (err) {
+      alert(`Couldn't save: ${err.message}`);
+    } finally {
+      saveMigrationConfigBtn.disabled = false;
+    }
+  });
+
+  checkMigrationsBtn.addEventListener('click', () => {
+    checkMigrationsBtn.disabled = true;
+    migrationStatus.textContent = 'Checking…';
+    runMigrationCheck(false).finally(() => {
+      checkMigrationsBtn.disabled = false;
+    });
   });
 
   // ---------- Duplicate-avoidance library settings ----------
@@ -590,6 +697,7 @@
         setWeeks(4);
         loadPlaylistConfig();
         loadLibrarySettings();
+        loadMigrationSettings();
       } else {
         loggedOut.classList.remove('hidden');
         authArea.innerHTML = '<a href="/login" class="btn btn-primary">Connect Spotify</a>';

@@ -95,6 +95,18 @@
           <p class="weight-total">Total allocated: <span id="weightTotal">0</span>% / 100%</p>
         </div>
 
+        <label class="rec-count-field">
+          <span class="counter-label">how many recommendations</span>
+          <select id="recCountSelect">
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+          </select>
+        </label>
+        <p class="fine-print">Since each pick needs a distinct artist, requesting more than the AI can genuinely
+          justify for your listening pattern may return fewer than asked — quality over hitting the exact number.</p>
+
         <button type="button" id="recsBtn" class="btn btn-secondary">Get recommendations</button>
         <div id="recsLoading" class="loading hidden">
           <div class="vu-meter" aria-hidden="true">
@@ -157,6 +169,16 @@
             <option value="8">8 weeks</option>
           </select>
         </label>
+        <label>
+          <span class="counter-label">how many tracks</span>
+          <select id="autoRecCountSelect">
+            <option value="10" selected>10</option>
+            <option value="12">12</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+          </select>
+        </label>
       </div>
 
       <div class="btn-row">
@@ -190,6 +212,27 @@
       </div>
 
       <p id="indexStatus" class="fine-print"></p>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">06 — track promotions</p>
+      <h2 class="panel-title">Notice when you move a track to another playlist</h2>
+      <p class="fine-print">Pick a playlist you use to "keep" songs you really like (e.g. Starred). When a track
+        Rewind recommended shows up newly added there, it's treated as a strong Like automatically — including the
+        same "5 more from this artist" bonus — the next time this checks (on page load, and before every scheduled
+        sync).</p>
+
+      <label>
+        <span class="counter-label">graduation playlist</span>
+        <select id="migrationPlaylistSelect"><option value="">— none selected —</option></select>
+      </label>
+
+      <div class="btn-row">
+        <button type="button" id="saveMigrationConfigBtn" class="btn btn-secondary">Save selection</button>
+        <button type="button" id="checkMigrationsBtn" class="btn btn-primary">Check now</button>
+      </div>
+
+      <p id="migrationStatus" class="fine-print"></p>
     </section>
   </section>
 
