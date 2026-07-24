@@ -60,13 +60,31 @@ npm start
 Visit **http://127.0.0.1:8888**, click **Connect Spotify**, approve access, then set how many weeks
 back you want and hit **Analyze**, followed by **Get recommendations**.
 
+## How recommendations are actually built
+
+Two things drive what Claude sees:
+
+1. **Real play counts, not Spotify's own ranking.** Rather than using Spotify's opaque
+   "top tracks" algorithm, Rewind pages backward through `/me/player/recently-played`
+   (it supports cursor pagination via `before`, which most integrations skip) and tallies
+   how many times each track was actually played within your chosen week window. That
+   ranked list — genuine repeat-listen counts — is the primary signal in the prompt, not
+   just "was this played at some point in the window." This is capped at 10 pages (500
+   plays) per request to keep API usage sane; if you hit that cap, or if Spotify's own
+   history for this endpoint doesn't go back as far as you asked, the app tells you.
+2. **Songs you've liked from past recommendations.** Every recommendation has a **Like**
+   button. Liking one saves it to `.data/store.json`, and every future recommendation
+   call — both the interactive button and the scheduled auto-playlist sync — includes
+   your liked history in the prompt, with instructions to calibrate toward that taste
+   rather than just repeating the same picks. This compounds over time as you like more.
+
 ## How the "weeks" window works
 
-Spotify's `recently-played` endpoint returns your last 50 plays with real timestamps, so that part
-respects your exact window. But its `top artists/tracks` endpoints only support three fixed
-buckets — roughly 4 weeks, 6 months, or several years — so Rewind snaps your chosen week count to
-whichever bucket is closest and tells you which one it used. If you listen to a lot of music, 50
-recent plays may cover less time than you asked for; the app flags this when it happens.
+Spotify's `recently-played` endpoint returns real timestamps, so play counts respect your
+exact window (subject to the pagination cap above). Its `top artists` endpoint (used only
+for the genre breakdown) supports just three fixed buckets — roughly 4 weeks, 6 months, or
+several years — so Rewind snaps your chosen week count to whichever is closest for that
+part specifically.
 
 ## Auto-Record: a synced playlist on a schedule
 

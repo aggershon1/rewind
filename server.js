@@ -103,7 +103,8 @@ app.post('/api/recommendations', async (req, res) => {
   try {
     const token = await getValidAccessToken();
     const history = await fetchHistory(token, weeks);
-    const recommendations = await getRecommendations(history);
+    const store = loadStore();
+    const recommendations = await getRecommendations(history, store.feedback?.liked || []);
     res.json({ recommendations, basedOn: { weeksRequested: weeks, timeRangeLabel: history.timeRangeLabel } });
   } catch (err) {
     console.error(err);
@@ -140,6 +141,46 @@ app.post('/api/playlist-config', (req, res) => {
 app.post('/api/playlist-sync', async (req, res) => {
   const result = await syncPlaylistCore();
   res.status(result.ok ? 200 : 500).json(result);
+});
+
+// ---------- Recommendation feedback (liked picks feed future prompts) ----------
+
+function feedbackKey(name, artist) {
+  return `${(name || '').trim().toLowerCase()}::${(artist || '').trim().toLowerCase()}`;
+}
+
+const MAX_LIKED = 100;
+
+app.get('/api/feedback', (req, res) => {
+  const store = loadStore();
+  res.json({ liked: store.feedback?.liked || [] });
+});
+
+app.post('/api/feedback', (req, res) => {
+  const { name, artist, type, genre, reason, liked } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'name is required' });
+
+  const store = loadStore();
+  if (!store.feedback) store.feedback = { liked: [] };
+  const key = feedbackKey(name, artist);
+  const existingIndex = store.feedback.liked.findIndex((f) => f.key === key);
+
+  if (liked === false) {
+    if (existingIndex !== -1) store.feedback.liked.splice(existingIndex, 1);
+  } else {
+    const entry = { key, name, artist: artist || null, type: type || null, genre: genre || null, reason: reason || null, likedAt: new Date().toISOString() };
+    if (existingIndex !== -1) {
+      store.feedback.liked[existingIndex] = entry;
+    } else {
+      store.feedback.liked.push(entry);
+      if (store.feedback.liked.length > MAX_LIKED) {
+        store.feedback.liked = store.feedback.liked.slice(store.feedback.liked.length - MAX_LIKED);
+      }
+    }
+  }
+
+  saveStore(store);
+  res.json({ liked: store.feedback.liked });
 });
 
 // ---------- Startup ----------

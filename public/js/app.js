@@ -17,6 +17,7 @@
   const genreBars = document.getElementById('genreBars');
   const topArtistsEl = document.getElementById('topArtists');
   const topTracksEl = document.getElementById('topTracks');
+  const repeatCoverageNote = document.getElementById('repeatCoverageNote');
   const recentNote = document.getElementById('recentNote');
   const recentStrip = document.getElementById('recentStrip');
 
@@ -36,6 +37,11 @@
   const syncStatus = document.getElementById('syncStatus');
 
   let weeks = 4;
+  let likedKeys = new Set();
+
+  function feedbackKey(name, artist) {
+    return `${(name || '').trim().toLowerCase()}::${(artist || '').trim().toLowerCase()}`;
+  }
 
   function setWeeks(n) {
     weeks = Math.min(52, Math.max(1, n));
@@ -56,7 +62,7 @@
   }
 
   function renderHistory(data) {
-    rangeNote.textContent = `Snapped to Spotify's "${data.timeRangeLabel}" bucket for top items. Recently-played is filtered to your exact ${data.weeksRequested}-week window.`;
+    rangeNote.textContent = `Genres use Spotify's "${data.timeRangeLabel}" top-artists bucket. Track play counts are tallied directly from your history over your exact ${data.weeksRequested}-week window.`;
 
     // Genre bars
     genreBars.innerHTML = '';
@@ -86,15 +92,20 @@
       )
       .join('');
 
-    // Top tracks
-    topTracksEl.innerHTML = data.topTracks
-      .map(
-        (t) => `<li><span class="track-name">${t.name}</span><span class="track-artist">— ${t.artist}</span></li>`
-      )
-      .join('');
+    // Most repeated tracks (ranked by actual play count)
+    const coverage = data.playCountCoverage || {};
+    repeatCoverageNote.textContent =
+      coverage.note || `Counted ${coverage.totalPlaysCounted || 0} play(s) across this window.`;
+    topTracksEl.innerHTML =
+      data.mostRepeatedTracks
+        .map(
+          (t) =>
+            `<li><span class="track-name">${t.name}</span><span class="track-artist">— ${t.artist}</span><span class="play-count">×${t.count}</span></li>`
+        )
+        .join('') || '<li class="fine-print">No repeated plays found in this window.</li>';
 
-    // Recently played
-    recentNote.textContent = data.recentlyPlayedNote || `${data.recentlyPlayed.length} play(s) in the last ${data.weeksRequested} week(s).`;
+    // Recently played (raw, most recent plays — not filtered to the week window)
+    recentNote.textContent = `${data.recentlyPlayed.length} of your most recent plays (for reference — see "Most repeated tracks" above for window-based counts).`;
     recentStrip.innerHTML = data.recentlyPlayed
       .map(
         (r) => `
@@ -104,7 +115,7 @@
         <span class="played-at">${timeAgo(r.playedAt)}</span>
       </div>`
       )
-      .join('') || '<p class="fine-print">Nothing played in this window yet.</p>';
+      .join('') || '<p class="fine-print">Nothing played recently.</p>';
 
     resultsArea.classList.remove('hidden');
     recsList.innerHTML = '';
@@ -126,11 +137,75 @@
     }
   }
 
+  async function loadLikedKeys() {
+    try {
+      const resp = await fetch('/api/feedback');
+      const data = await resp.json();
+      likedKeys = new Set((data.liked || []).map((f) => f.key));
+    } catch {
+      likedKeys = new Set();
+    }
+  }
+
+  function renderRecs(recommendations) {
+    recsList.innerHTML = (recommendations || [])
+      .map((r) => {
+        const key = feedbackKey(r.name, r.artist);
+        const isLiked = likedKeys.has(key);
+        return `
+        <li data-key="${key}" data-name="${encodeURIComponent(r.name || '')}" data-artist="${encodeURIComponent(r.artist || '')}" data-type="${encodeURIComponent(r.type || '')}" data-genre="${encodeURIComponent(r.genre || '')}" data-reason="${encodeURIComponent(r.reason || '')}">
+          <span class="mixtape-name">${r.name}${r.artist ? ` — ${r.artist}` : ''}</span>
+          <span class="mixtape-type">${r.type}</span>
+          <span class="mixtape-genre">${r.genre || ''}</span>
+          <button type="button" class="like-btn ${isLiked ? 'liked' : ''}" aria-pressed="${isLiked}">
+            ${isLiked ? '♥ Liked' : '♡ Like'}
+          </button>
+          <p class="mixtape-reason">${r.reason || ''}</p>
+        </li>`;
+      })
+      .join('');
+  }
+
+  recsList.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.like-btn');
+    if (!btn) return;
+    const li = btn.closest('li');
+    const wasLiked = btn.classList.contains('liked');
+    const payload = {
+      name: decodeURIComponent(li.dataset.name),
+      artist: decodeURIComponent(li.dataset.artist),
+      type: decodeURIComponent(li.dataset.type),
+      genre: decodeURIComponent(li.dataset.genre),
+      reason: decodeURIComponent(li.dataset.reason),
+      liked: !wasLiked,
+    };
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) throw new Error('Save failed');
+      const data = await resp.json();
+      likedKeys = new Set((data.liked || []).map((f) => f.key));
+      const nowLiked = likedKeys.has(li.dataset.key);
+      btn.classList.toggle('liked', nowLiked);
+      btn.setAttribute('aria-pressed', String(nowLiked));
+      btn.textContent = nowLiked ? '♥ Liked' : '♡ Like';
+    } catch (err) {
+      alert(`Couldn't save that: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   async function runRecommendations() {
     recsLoading.classList.remove('hidden');
     recsList.innerHTML = '';
     recsBtn.disabled = true;
     try {
+      await loadLikedKeys();
       const resp = await fetch('/api/recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,17 +213,7 @@
       });
       if (!resp.ok) throw new Error((await resp.json()).error || 'Request failed');
       const data = await resp.json();
-      recsList.innerHTML = (data.recommendations || [])
-        .map(
-          (r) => `
-        <li>
-          <span class="mixtape-name">${r.name}${r.artist ? ` — ${r.artist}` : ''}</span>
-          <span class="mixtape-type">${r.type}</span>
-          <span class="mixtape-genre">${r.genre || ''}</span>
-          <p class="mixtape-reason">${r.reason || ''}</p>
-        </li>`
-        )
-        .join('');
+      renderRecs(data.recommendations);
     } catch (err) {
       alert(`Couldn't get recommendations: ${err.message}`);
     } finally {
